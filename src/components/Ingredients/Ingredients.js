@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useReducer } from "react";
+import React, { useMemo, useEffect, useCallback, useReducer } from "react";
 
 import IngredientForm from "./IngredientForm";
 import Search from "./Search";
@@ -18,11 +18,30 @@ const ingredientReducer = (currentIngredients, action) => {
   }
 };
 
+const httpReducer = (curHttpState, action) => {
+  switch (action.type) {
+    case "SEND":
+      return { loading: true, error: null };
+    case "RESPONSE":
+      return { ...curHttpState, loading: false };
+    case "CATCH":
+      return { loading: false, error: action.errorMessage };
+    case "CLEAR":
+      return { ...curHttpState, error: null };
+    default:
+      throw new Error("can not reach!");
+  }
+};
+
 const Ingredients = () => {
   const [userIngredients, dispatch] = useReducer(ingredientReducer, []);
+  const [httpState, dispatchHttp] = useReducer(httpReducer, {
+    loading: false,
+    error: null,
+  });
   // const [userIngredients, setUserIngredients] = useState([]);
-  const [isLoading, setIsloading] = useState(false);
-  const [error, setError] = useState();
+  // const [isLoading, setIsloading] = useState(false);
+  // const [error, setError] = useState();
 
   useEffect(() => {
     console.log("useEffect rendering", userIngredients);
@@ -36,15 +55,15 @@ const Ingredients = () => {
     });
   }, []);
 
-  const addIngredientHandler = (ingredient) => {
-    setIsloading(true);
+  const addIngredientHandler = useCallback((ingredient) => {
+    dispatchHttp({ type: "SEND" });
     fetch("https://react-hook-update-351a0.firebaseio.com/ingredients.json", {
       method: "POST",
       body: JSON.stringify(ingredient),
       headers: { "Content-Type": "application/json" },
     })
       .then((response) => {
-        setIsloading(false);
+        dispatchHttp({ type: "RESPONSE" });
         return response.json();
       })
       .then((responseData) => {
@@ -58,13 +77,15 @@ const Ingredients = () => {
         });
       })
       .catch((error) => {
-        setError("something went wrong !!");
-        setIsloading(false);
+        dispatchHttp({
+          type: "CATCH",
+          errorMessage: "something went wrong !!",
+        });
       });
-  };
+  }, []);
 
-  const removeIngredientHandler = (id) => {
-    setIsloading(true);
+  const removeIngredientHandler = useCallback((id) => {
+    dispatchHttp({ type: "SEND" });
     fetch(
       `https://react-hook-update-351a0.firebaseio.com/ingredients/${id}.json`,
       {
@@ -72,7 +93,7 @@ const Ingredients = () => {
       }
     )
       .then((response) => {
-        setIsloading(false);
+        dispatchHttp({ type: "RESPONSE" });
         // setUserIngredients((prevState) =>
         //   prevState.filter((ingredient) => ingredient.id !== id)
         // );
@@ -82,29 +103,39 @@ const Ingredients = () => {
         });
       })
       .catch((error) => {
-        setError("something went wrong !!");
-        setIsloading(false);
+        dispatchHttp({
+          type: "CATCH",
+          errorMessage: "something went wrong !!",
+        });
       });
-  };
+  }, []);
 
-  const clearError = () => {
-    setError(null);
-  };
+  const clearError = useCallback(() => {
+    dispatchHttp({ type: "CLEAR" });
+  }, []);
+
+  const ingredientList = useMemo(() => {
+    return (
+      <IngredientList
+        ingredients={userIngredients}
+        onRemoveItem={removeIngredientHandler}
+      />
+    );
+  }, [userIngredients, removeIngredientHandler]);
 
   return (
     <div className="App">
-      {error && <ErrorModal onClose={clearError}>{error}</ErrorModal>}
+      {httpState.error && (
+        <ErrorModal onClose={clearError}>{httpState.error}</ErrorModal>
+      )}
       <IngredientForm
         onAddIngredient={addIngredientHandler}
-        loading={isLoading}
+        loading={httpState.loading}
       />
 
       <section>
         <Search onLoadIngredients={loadIngredientsHandler} />
-        <IngredientList
-          ingredients={userIngredients}
-          onRemoveItem={removeIngredientHandler}
-        />
+        {ingredientList}
       </section>
     </div>
   );
